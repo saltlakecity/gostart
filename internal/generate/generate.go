@@ -9,6 +9,24 @@ import (
 	"github.com/saltlakecity/gostart/internal/models"
 )
 
+func initGoModule(path, name string) error {
+	if name == "" {
+		name = "example.com/go-module"
+	}
+	cmd := exec.Command("go", "mod", "init", name)
+
+	cmd.Dir = path
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("Can't create module: %w", err)
+	}
+
+	return nil
+}
+
 func initGitRepo(path string) error {
 
 	if _, err := exec.LookPath("git"); err != nil {
@@ -30,6 +48,7 @@ func initGitRepo(path string) error {
 }
 func GenerateProject(opts models.ProjectOptions) error {
 	name := opts.ProjectName
+	moduleName := opts.ModuleName
 	git := opts.InitGit
 	if name == "" {
 		name = "my-go-project"
@@ -47,6 +66,7 @@ func GenerateProject(opts models.ProjectOptions) error {
 			return err
 		}
 	}
+	initGoModule(filepath.Join(name), moduleName)
 	if git {
 		err := initGitRepo(filepath.Join(name))
 		if err != nil {
