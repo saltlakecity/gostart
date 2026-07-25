@@ -13,7 +13,8 @@ func collectProjectOptions() models.ProjectOptions {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	return models.ProjectOptions{
-		ProjectName: prompt.Ask(scanner, "Название проекта"),
+		ProjectName: prompt.Ask(scanner, "Enter project name (or leave empty for default project name)"),
+		InitGit:     prompt.Confirm(scanner, "Init Git repository?"),
 	}
 }
 

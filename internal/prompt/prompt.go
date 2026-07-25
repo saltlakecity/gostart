@@ -6,10 +6,6 @@ import (
 	"strings"
 )
 
-var allowed = []string{
-	"y", "Y", "n", "N",
-}
-
 func Ask(scanner *bufio.Scanner, question string) string {
 	fmt.Print(question + ": ")
 
@@ -18,10 +14,20 @@ func Ask(scanner *bufio.Scanner, question string) string {
 	return strings.TrimSpace(scanner.Text())
 }
 
-func Confirm(scanner *bufio.Scanner, question string, allowed []string) bool {
-	answer := Ask(scanner, question+" [y/n]")
+func Confirm(scanner *bufio.Scanner, question string) bool {
+	for {
+		answer := Ask(scanner, question+" [y/n]")
+		answer = strings.ToLower(strings.TrimSpace(answer))
 
-	answer = strings.ToLower(answer)
+		switch answer {
+		case "y", "yes":
+			return true
 
-	return answer == "y" || answer == "yes"
+		case "n", "no":
+			return false
+
+		default:
+			fmt.Println("Enter [y] or [n]")
+		}
+	}
 }
