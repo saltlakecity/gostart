@@ -15,7 +15,14 @@ func collectProjectOptions() models.ProjectOptions {
 	return models.ProjectOptions{
 		ProjectName: prompt.Ask(scanner, "Enter project name (or leave empty for default project name)"),
 		ModuleName:  prompt.Ask(scanner, "Enter Go-module name"),
-		InitGit:     prompt.Confirm(scanner, "Init Git repository?"),
+		ProjectType: prompt.Choice(scanner, &prompt.ChoiceOptions{
+			Title:          "Select project type:",
+			Prompt:         "Project type [basic]:",
+			Options:        []string{"basic", "http", "cli"},
+			Default:        "basic",
+			InvalidMessage: "Unknown project type",
+		}),
+		InitGit: prompt.Confirm(scanner, "Init Git repository?"),
 	}
 }
 
