@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/saltlakecity/gostart/internal/models"
+	"github.com/saltlakecity/gostart/internal/styles"
 )
 
 func createGitIgnore(projectRoot string) error {
@@ -36,11 +37,14 @@ func initGoModule(projectRoot, moduleName string) error {
 
 	cmd := exec.Command("go", "mod", "init", moduleName)
 	cmd.Dir = projectRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("create Go module: %w", err)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf(
+			"create Go module: %w: %s",
+			err,
+			strings.TrimSpace(string(output)),
+		)
 	}
 
 	return nil
@@ -53,13 +57,16 @@ func initGitRepo(projectRoot string) error {
 		)
 	}
 
-	cmd := exec.Command("git", "init")
+	cmd := exec.Command("git", "init", "--quiet")
 	cmd.Dir = projectRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("execute git init: %w", err)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf(
+			"execute git init: %w: %s",
+			err,
+			strings.TrimSpace(string(output)),
+		)
 	}
 
 	return nil
@@ -77,9 +84,13 @@ func GenerateProject(opts models.ProjectOptions) error {
 	if projectType == "" {
 		projectType = "basic"
 	}
+	opts.ProjectName = name
+	opts.ProjectType = projectType
 
 	projectRoot := name
 	templateRoot := filepath.Join("internal", "templates")
+
+	fmt.Printf("\n%s\n", styles.Bold("Creating project"))
 
 	if err := GenerateFromTemplate(
 		projectRoot,
@@ -93,21 +104,38 @@ func GenerateProject(opts models.ProjectOptions) error {
 	if err := initGoModule(projectRoot, moduleName); err != nil {
 		return err
 	}
+	printCompleted("Go module initialized")
 
 	if err := createGitIgnore(projectRoot); err != nil {
 		return err
 	}
+	printCompleted(".gitignore created")
 
 	if opts.InitGit {
 		if err := initGitRepo(projectRoot); err != nil {
 			return err
 		}
+		printCompleted("Git repository initialized")
 	}
 
-	fmt.Printf("\nProject %q successfully created\n", name)
-	fmt.Printf("Run:\n  cd %s\n  go run .\n", name)
+	fmt.Printf(
+		"\n%s %s\n\n%s\n  %s\n  %s\n",
+		styles.Success(styles.SuccessIcon),
+		styles.Bold(fmt.Sprintf("Project %q successfully created", name)),
+		styles.Muted("Next steps:"),
+		styles.Accent("cd "+name),
+		styles.Accent("go run ."),
+	)
 
 	return nil
+}
+
+func printCompleted(message string) {
+	fmt.Printf(
+		"  %s %s\n",
+		styles.Success(styles.SuccessIcon),
+		message,
+	)
 }
 
 func GenerateFromTemplate(
@@ -145,7 +173,11 @@ func GenerateFromTemplate(
 					)
 				}
 
-				fmt.Printf("directory: %s\n", destinationPath)
+				fmt.Printf(
+					"  %s %s\n",
+					styles.Muted("mkdir "),
+					styles.Muted(destinationPath),
+				)
 				return nil
 			}
 
@@ -174,7 +206,11 @@ func GenerateFromTemplate(
 					return err
 				}
 
-				fmt.Printf("template:  %s\n", destinationPath)
+				fmt.Printf(
+					"  %s %s\n",
+					styles.Success("create"),
+					destinationPath,
+				)
 				return nil
 			}
 
@@ -182,7 +218,11 @@ func GenerateFromTemplate(
 				return err
 			}
 
-			fmt.Printf("file:      %s\n", destinationPath)
+			fmt.Printf(
+				"  %s %s\n",
+				styles.Success("create"),
+				destinationPath,
+			)
 			return nil
 		},
 	)

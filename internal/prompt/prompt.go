@@ -5,10 +5,16 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/saltlakecity/gostart/internal/styles"
 )
 
 func Ask(scanner *bufio.Scanner, question string) string {
-	fmt.Print(question + ": ")
+	fmt.Printf(
+		"%s %s: ",
+		styles.Accent(styles.PromptIcon),
+		styles.Bold(question),
+	)
 
 	scanner.Scan()
 
@@ -17,18 +23,22 @@ func Ask(scanner *bufio.Scanner, question string) string {
 
 func Confirm(scanner *bufio.Scanner, question string) bool {
 	for {
-		answer := Ask(scanner, question+" [y/n]")
+		answer := Ask(scanner, question+" "+styles.Muted("[y/N]"))
 		answer = strings.ToLower(strings.TrimSpace(answer))
 
 		switch answer {
 		case "y", "yes":
 			return true
 
-		case "n", "no":
+		case "", "n", "no":
 			return false
 
 		default:
-			fmt.Println("Enter [y] or [n]")
+			fmt.Printf(
+				"  %s %s\n",
+				styles.Error(styles.ErrorIcon),
+				styles.Error("Enter y or n"),
+			)
 		}
 	}
 }
@@ -43,11 +53,21 @@ type ChoiceOptions struct {
 
 func Choice(scanner *bufio.Scanner, options *ChoiceOptions) string {
 	for {
+		fmt.Printf("\n%s\n", styles.Bold(options.Title))
+
 		for _, option := range options.Options {
-			fmt.Println(option)
+			fmt.Printf("  %s %s\n", styles.Muted("•"), option)
 		}
 
-		answer := Ask(scanner, options.Title)
+		question := options.Prompt
+		if question == "" {
+			question = options.Title
+		}
+		if options.Default != "" {
+			question += " " + styles.Muted("["+options.Default+"]")
+		}
+
+		answer := Ask(scanner, question)
 		answer = strings.ToLower(strings.TrimSpace(answer))
 		if answer == "" {
 			return options.Default
@@ -58,7 +78,10 @@ func Choice(scanner *bufio.Scanner, options *ChoiceOptions) string {
 			return answer
 		}
 
-		fmt.Println(options.InvalidMessage)
+		fmt.Printf(
+			"  %s %s\n",
+			styles.Error(styles.ErrorIcon),
+			styles.Error(options.InvalidMessage),
+		)
 	}
-
 }
