@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/saltlakecity/gostart/internal/commands"
@@ -9,15 +10,25 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage("")
-		return
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
+	if len(args) == 0 {
+		printUsage(os.Stdout, "")
+		return 0
 	}
 
-	command := os.Args[1]
-
-	switch command {
+	switch args[0] {
 	case "create":
+		if len(args) != 1 {
+			printUsage(
+				os.Stderr,
+				`Command "create" does not accept arguments yet`,
+			)
+			return 2
+		}
+
 		if err := commands.RunCreate(); err != nil {
 			fmt.Fprintf(
 				os.Stderr,
@@ -25,23 +36,36 @@ func main() {
 				styles.Error(styles.ErrorIcon),
 				styles.Error(err.Error()),
 			)
-			os.Exit(1)
+			return 1
 		}
+
+		return 0
+
+	case "help", "--help", "-h":
+		printUsage(os.Stdout, "")
+		return 0
+
 	default:
-		printUsage(fmt.Sprintf("Unknown command %q", command))
+		printUsage(
+			os.Stderr,
+			fmt.Sprintf("Unknown command %q", args[0]),
+		)
+		return 2
 	}
 }
 
-func printUsage(message string) {
+func printUsage(writer io.Writer, message string) {
 	if message != "" {
-		fmt.Printf(
+		fmt.Fprintf(
+			writer,
 			"\n%s %s\n",
 			styles.Error(styles.ErrorIcon),
 			styles.Error(message),
 		)
 	}
 
-	fmt.Printf(
+	fmt.Fprintf(
+		writer,
 		"\n%s\n%s\n\n%s\n  %s\n",
 		styles.Bold(styles.Accent("GoStart")),
 		styles.Muted("Create a new Go project"),
