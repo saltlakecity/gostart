@@ -95,7 +95,9 @@ func checkDestinationAvailable(projectRoot string) error {
 
 }
 
-func GenerateProject(opts models.ProjectOptions) error {
+func GenerateProject(
+	opts models.ProjectOptions,
+) (resultErr error) {
 	name := opts.ProjectName
 	moduleName := opts.ModuleName
 	projectType := opts.ProjectType
@@ -107,48 +109,110 @@ func GenerateProject(opts models.ProjectOptions) error {
 	if projectType == "" {
 		projectType = "basic"
 	}
+
 	opts.ProjectName = name
 	opts.ProjectType = projectType
 
 	projectRoot := name
+
 	if err := checkDestinationAvailable(projectRoot); err != nil {
 		return err
 	}
-	templateFS, err := fs.Sub(projectTemplates.Files, projectType)
+
+	templateFS, err := fs.Sub(
+		projectTemplates.Files,
+		projectType,
+	)
 	if err != nil {
-		return fmt.Errorf("generate project from template: %w", err)
+		return fmt.Errorf(
+			"select project template %q: %w",
+			projectType,
+			err,
+		)
 	}
+
+	parentDirectory := filepath.Dir(projectRoot)
+	temporaryPattern := "." + filepath.Base(projectRoot) + "-*"
+
+	stagingRoot, err := os.MkdirTemp(
+		parentDirectory,
+		temporaryPattern,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"create temporary project directory: %w",
+			err,
+		)
+	}
+
+	removeStaging := true
+
+	defer func() {
+		if !removeStaging {
+			return
+		}
+
+		if cleanupErr := os.RemoveAll(stagingRoot); cleanupErr != nil {
+			resultErr = errors.Join(
+				resultErr,
+				fmt.Errorf(
+					"remove temporary project directory %s: %w",
+					stagingRoot,
+					cleanupErr,
+				),
+			)
+		}
+	}()
+
 	fmt.Printf("\n%s\n", styles.Bold("Creating project"))
 
 	if err := GenerateFromTemplate(
-		projectRoot,
+		stagingRoot,
 		templateFS,
 		opts,
 	); err != nil {
-		return fmt.Errorf("generate project from template: %w", err)
+		return fmt.Errorf(
+			"generate project from template: %w",
+			err,
+		)
 	}
 
-	if err := initGoModule(projectRoot, moduleName); err != nil {
+	if err := initGoModule(stagingRoot, moduleName); err != nil {
 		return err
 	}
 	printCompleted("Go module initialized")
 
-	if err := createGitIgnore(projectRoot); err != nil {
+	if err := createGitIgnore(stagingRoot); err != nil {
 		return err
 	}
 	printCompleted(".gitignore created")
 
 	if opts.InitGit {
-		if err := initGitRepo(projectRoot); err != nil {
+		if err := initGitRepo(stagingRoot); err != nil {
 			return err
 		}
 		printCompleted("Git repository initialized")
 	}
 
+	if err := os.Rename(stagingRoot, projectRoot); err != nil {
+		return fmt.Errorf(
+			"move completed project to %s: %w",
+			projectRoot,
+			err,
+		)
+	}
+
+	removeStaging = false
+
 	fmt.Printf(
 		"\n%s %s\n\n%s\n  %s\n  %s\n",
 		styles.Success(styles.SuccessIcon),
-		styles.Bold(fmt.Sprintf("Project %q successfully created", name)),
+		styles.Bold(
+			fmt.Sprintf(
+				"Project %q successfully created",
+				name,
+			),
+		),
 		styles.Muted("Next steps:"),
 		styles.Accent("cd "+name),
 		styles.Accent("go run ."),
