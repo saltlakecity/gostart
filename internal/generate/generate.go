@@ -12,6 +12,7 @@ import (
 
 	"github.com/saltlakecity/gostart/internal/models"
 	"github.com/saltlakecity/gostart/internal/styles"
+	projectTemplates "github.com/saltlakecity/gostart/internal/templates"
 )
 
 func createGitIgnore(projectRoot string) error {
@@ -88,14 +89,15 @@ func GenerateProject(opts models.ProjectOptions) error {
 	opts.ProjectType = projectType
 
 	projectRoot := name
-	templateRoot := filepath.Join("internal", "templates")
-
+	templateFS, err := fs.Sub(projectTemplates.Files, projectType)
+	if err != nil {
+		return fmt.Errorf("generate project from template: %w", err)
+	}
 	fmt.Printf("\n%s\n", styles.Bold("Creating project"))
 
 	if err := GenerateFromTemplate(
 		projectRoot,
-		templateRoot,
-		projectType,
+		templateFS,
 		opts,
 	); err != nil {
 		return fmt.Errorf("generate project from template: %w", err)
@@ -140,29 +142,29 @@ func printCompleted(message string) {
 
 func GenerateFromTemplate(
 	projectRoot string,
-	templateRoot string,
-	projectType string,
+	sourceFS fs.FS,
 	data any,
 ) error {
-	sourceRoot := filepath.Join(templateRoot, projectType)
-
-	return filepath.WalkDir(
-		sourceRoot,
-		func(path string, entry fs.DirEntry, walkErr error) error {
+	return fs.WalkDir(
+		sourceFS,
+		".",
+		func(
+			sourcePath string,
+			entry fs.DirEntry,
+			walkErr error,
+		) error {
 			if walkErr != nil {
-				return fmt.Errorf("walk through %s: %w", path, walkErr)
-			}
-
-			relativePath, err := filepath.Rel(sourceRoot, path)
-			if err != nil {
 				return fmt.Errorf(
-					"calculate relative path for %s: %w",
-					path,
-					err,
+					"walk through %s: %w",
+					sourcePath,
+					walkErr,
 				)
 			}
 
-			destinationPath := filepath.Join(projectRoot, relativePath)
+			destinationPath := filepath.Join(
+				projectRoot,
+				filepath.FromSlash(sourcePath),
+			)
 
 			if entry.IsDir() {
 				if err := os.MkdirAll(destinationPath, 0755); err != nil {
@@ -192,14 +194,15 @@ func GenerateFromTemplate(
 				)
 			}
 
-			if strings.HasSuffix(path, ".tmpl") {
+			if strings.HasSuffix(sourcePath, ".tmpl") {
 				destinationPath = strings.TrimSuffix(
 					destinationPath,
 					".tmpl",
 				)
 
 				if err := renderTemplate(
-					path,
+					sourceFS,
+					sourcePath,
 					destinationPath,
 					data,
 				); err != nil {
@@ -214,7 +217,11 @@ func GenerateFromTemplate(
 				return nil
 			}
 
-			if err := copyFile(path, destinationPath); err != nil {
+			if err := copyFile(
+				sourceFS,
+				sourcePath,
+				destinationPath,
+			); err != nil {
 				return err
 			}
 
@@ -229,11 +236,21 @@ func GenerateFromTemplate(
 }
 
 func renderTemplate(
+	sourceFS fs.FS,
 	sourcePath string,
 	destinationPath string,
 	data any,
 ) error {
-	tmpl, err := template.ParseFiles(sourcePath)
+	content, err := fs.ReadFile(sourceFS, sourcePath)
+	if err != nil {
+		return fmt.Errorf(
+			"read template %s: %w",
+			sourcePath,
+			err,
+		)
+	}
+
+	tmpl, err := template.New(sourcePath).Parse(string(content))
 	if err != nil {
 		return fmt.Errorf(
 			"parse template %s: %w",
@@ -253,7 +270,7 @@ func renderTemplate(
 
 	if err := tmpl.Execute(outputFile, data); err != nil {
 		outputFile.Close()
-		os.Remove(destinationPath)
+		_ = os.Remove(destinationPath)
 
 		return fmt.Errorf(
 			"execute template %s: %w",
@@ -273,8 +290,12 @@ func renderTemplate(
 	return nil
 }
 
-func copyFile(sourcePath, destinationPath string) error {
-	sourceFile, err := os.Open(sourcePath)
+func copyFile(
+	sourceFS fs.FS,
+	sourcePath string,
+	destinationPath string,
+) error {
+	sourceFile, err := sourceFS.Open(sourcePath)
 	if err != nil {
 		return fmt.Errorf(
 			"open source file %s: %w",
@@ -284,19 +305,10 @@ func copyFile(sourcePath, destinationPath string) error {
 	}
 	defer sourceFile.Close()
 
-	sourceInfo, err := sourceFile.Stat()
-	if err != nil {
-		return fmt.Errorf(
-			"read file information for %s: %w",
-			sourcePath,
-			err,
-		)
-	}
-
 	destinationFile, err := os.OpenFile(
 		destinationPath,
 		os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
-		sourceInfo.Mode(),
+		0644,
 	)
 	if err != nil {
 		return fmt.Errorf(
@@ -308,6 +320,7 @@ func copyFile(sourcePath, destinationPath string) error {
 
 	if _, err := io.Copy(destinationFile, sourceFile); err != nil {
 		destinationFile.Close()
+
 		return fmt.Errorf(
 			"copy %s to %s: %w",
 			sourcePath,
