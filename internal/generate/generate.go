@@ -1,6 +1,7 @@
 package generate
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -73,6 +74,27 @@ func initGitRepo(projectRoot string) error {
 	return nil
 }
 
+func checkDestinationAvailable(projectRoot string) error {
+	_, err := os.Stat(projectRoot)
+
+	switch {
+	case err == nil:
+		return fmt.Errorf(
+			"destination folder %q already exists",
+			projectRoot,
+		)
+	case errors.Is(err, os.ErrNotExist):
+		return nil
+	default:
+		return fmt.Errorf(
+			"inspect destination folder %q: %w",
+			projectRoot,
+			err,
+		)
+	}
+
+}
+
 func GenerateProject(opts models.ProjectOptions) error {
 	name := opts.ProjectName
 	moduleName := opts.ModuleName
@@ -89,6 +111,9 @@ func GenerateProject(opts models.ProjectOptions) error {
 	opts.ProjectType = projectType
 
 	projectRoot := name
+	if err := checkDestinationAvailable(projectRoot); err != nil {
+		return err
+	}
 	templateFS, err := fs.Sub(projectTemplates.Files, projectType)
 	if err != nil {
 		return fmt.Errorf("generate project from template: %w", err)
